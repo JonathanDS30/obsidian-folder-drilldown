@@ -19,8 +19,7 @@ export default class FolderDrilldownPlugin extends Plugin {
 
 		// Register global event listener for delegation
 		// Use capture phase to intercept the second click of a double-click
-		this.clickHandler = (evt: MouseEvent) => this.handleClick(evt);
-		window.addEventListener('click', this.clickHandler, { capture: true });
+		this.registerDomEvent(window, 'click', (evt: MouseEvent) => this.handleClick(evt), { capture: true });
 
 		// Command to reset focus to root
 		this.addCommand({
@@ -68,8 +67,6 @@ export default class FolderDrilldownPlugin extends Plugin {
 	onunload() {
 		// Cleanup: Remove all added CSS classes
 		this.clearDrilldownStyles();
-		// Remove manual event listener
-		window.removeEventListener('click', this.clickHandler, { capture: true });
 	}
 
 	async loadSettings() {
@@ -84,14 +81,24 @@ export default class FolderDrilldownPlugin extends Plugin {
 	 * Handle click to manually detect double-click and intercept event.
 	 */
 	private handleClick(evt: MouseEvent) {
-		const target = evt.target as HTMLElement;
+		let target = evt.target as Node;
+		// Handle text nodes (common on some platforms/browsers)
+		// Use 3 instead of Node.TEXT_NODE to avoid potential reference errors if Node is not global
+		if (target && target.nodeType === 3) {
+			target = target.parentNode!;
+		}
+
+		// Safety check: Ensure target is a valid Element
+		if (!target || !(target instanceof Element)) return;
+
+		const element = target as HTMLElement;
 		
 		// Check if click occurred in file explorer
-		const explorerContainer = target.closest('.nav-files-container');
+		const explorerContainer = element.closest('.nav-files-container');
 		if (!explorerContainer) return;
 
 		const currentTime = new Date().getTime();
-		const isSameTarget = this.lastClickTarget === target;
+		const isSameTarget = this.lastClickTarget === element;
 		const isDouble = isSameTarget && (currentTime - this.lastClickTime < 300);
 
 		if (isDouble) {
@@ -104,11 +111,11 @@ export default class FolderDrilldownPlugin extends Plugin {
 			this.lastClickTime = 0;
 			this.lastClickTarget = null;
 
-			this.handleDrilldownAction(target);
+			this.handleDrilldownAction(element);
 		} else {
 			// First click
 			this.lastClickTime = currentTime;
-			this.lastClickTarget = target;
+			this.lastClickTarget = element;
 		}
 	}
 
