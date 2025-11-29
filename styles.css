@@ -1,0 +1,4 @@
+/* Hide irrelevant elements during drilldown */
+.is-hidden-by-drilldown {
+    display: none !important;
+}

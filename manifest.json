@@ -1,0 +1,10 @@
+{
+	"id": "obsidian-folder-drilldown",
+	"name": "Folder Drilldown",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Focus on a specific folder in the file explorer by double-clicking, hiding all other elements.",
+	"author": "JonathanDS30",
+	"authorUrl": "https://github.com/JonathanDS30/obsidian-folder-drilldown",
+	"isDesktopOnly": false
+}
