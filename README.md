@@ -1,7 +1,7 @@
 # Obsidian Folder Drilldown
 
 <p align="center">
-  <img src="./assets/logo.png" alt="Obsidian Folder Drilldown Logo" width="200" />
+  <img src="./assets/logo.png" alt="Obsidian Folder Drilldown Logo" width="800" />
 </p>
 
 A plugin for Obsidian that allows you to "drill down" into folders in the file explorer, making a specific folder act as the root of your view.
