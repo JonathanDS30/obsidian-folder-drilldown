@@ -1,4 +1,4 @@
-import { Plugin, TFolder, WorkspaceLeaf, TAbstractFile } from 'obsidian';
+import { Plugin, TFolder, WorkspaceLeaf } from 'obsidian';
 
 interface DrilldownSettings {
 	focusPath: string;
@@ -8,9 +8,17 @@ const DEFAULT_SETTINGS: DrilldownSettings = {
 	focusPath: '/'
 }
 
+interface InternalFileExplorerItem {
+	setCollapsed?: (collapsed: boolean) => void;
+}
+
+interface InternalFileExplorerView {
+	fileItems?: Record<string, InternalFileExplorerItem>;
+	setExpanded?: (folder: TFolder, expanded: boolean) => void;
+}
+
 export default class FolderDrilldownPlugin extends Plugin {
 	settings: DrilldownSettings = DEFAULT_SETTINGS;
-	private clickHandler: (evt: MouseEvent) => void = () => {};
 	private lastClickTime: number = 0;
 	private lastClickTarget: HTMLElement | null = null;
 
@@ -24,18 +32,18 @@ export default class FolderDrilldownPlugin extends Plugin {
 		// Command to reset focus to root
 		this.addCommand({
 			id: 'drilldown-reset',
-			name: 'Reset Focus (Go to Root)',
+			name: 'Reset focus (go to root)',
 			callback: () => {
-				this.setFocus('/');
+				void this.setFocus('/');
 			}
 		});
 
 		// Command to go back up one level
 		this.addCommand({
 			id: 'drilldown-back',
-			name: 'Go Back (Up one level)',
+			name: 'Go back (up one level)',
 			callback: () => {
-				this.goBack();
+				void this.goBack();
 			}
 		});
 
@@ -111,7 +119,7 @@ export default class FolderDrilldownPlugin extends Plugin {
 			this.lastClickTime = 0;
 			this.lastClickTarget = null;
 
-			this.handleDrilldownAction(element);
+			void this.handleDrilldownAction(element);
 		} else {
 			// First click
 			this.lastClickTime = currentTime;
@@ -122,7 +130,7 @@ export default class FolderDrilldownPlugin extends Plugin {
 	/**
 	 * Execute drilldown action based on target.
 	 */
-	private handleDrilldownAction(target: HTMLElement) {
+	private async handleDrilldownAction(target: HTMLElement) {
 		// Case 1: Click on a folder title
 		const folderTitle = target.closest('.nav-folder-title');
 		if (folderTitle) {
@@ -130,10 +138,10 @@ export default class FolderDrilldownPlugin extends Plugin {
 			if (path) {
 				// If double-clicking the ALREADY focused folder, go back
 				if (path === this.settings.focusPath) {
-					this.goBack();
+					await this.goBack();
 				} else {
 					// Otherwise, focus on this folder
-					this.setFocus(path);
+					await this.setFocus(path);
 				}
 				return;
 			}
@@ -144,7 +152,7 @@ export default class FolderDrilldownPlugin extends Plugin {
 		if (target.classList.contains('nav-files-container') || target.classList.contains('nav-folder-children')) {
 			// Only go back if not already at root
 			if (this.settings.focusPath !== '/') {
-				this.goBack();
+				await this.goBack();
 			}
 		}
 	}
@@ -181,14 +189,14 @@ export default class FolderDrilldownPlugin extends Plugin {
 	private collapseDirectChildren(folder: TFolder) {
 		const leaves = this.app.workspace.getLeavesOfType('file-explorer');
 		leaves.forEach((leaf: WorkspaceLeaf) => {
-			const view = leaf.view as any;
+			const view = leaf.view as unknown as InternalFileExplorerView;
 			
 			folder.children.forEach(child => {
 				if (child instanceof TFolder) {
 					// Try accessing via internal fileItems API
 					if (view.fileItems && view.fileItems[child.path]) {
 						const item = view.fileItems[child.path];
-						if (typeof item.setCollapsed === 'function') {
+						if (item && typeof item.setCollapsed === 'function') {
 							// true to collapse
 							item.setCollapsed(true);
 						}
@@ -208,12 +216,12 @@ export default class FolderDrilldownPlugin extends Plugin {
 	private expandFolder(folder: TFolder) {
 		const leaves = this.app.workspace.getLeavesOfType('file-explorer');
 		leaves.forEach((leaf: WorkspaceLeaf) => {
-			const view = leaf.view as any;
+			const view = leaf.view as unknown as InternalFileExplorerView;
 			
 			// Try accessing via internal fileItems API (more reliable for visual state)
 			if (view.fileItems && view.fileItems[folder.path]) {
 				const item = view.fileItems[folder.path];
-				if (typeof item.setCollapsed === 'function') {
+				if (item && typeof item.setCollapsed === 'function') {
 					// false to expand
 					item.setCollapsed(false);
 				}
@@ -237,10 +245,10 @@ export default class FolderDrilldownPlugin extends Plugin {
 			// If parent is root, path is '/'
 			// TFolder.path for root is '/'
 			const parentPath = currentFolder.parent.path;
-			this.setFocus(parentPath);
+			await this.setFocus(parentPath);
 		} else {
 			// Fallback
-			this.setFocus('/');
+			await this.setFocus('/');
 		}
 	}
 
@@ -263,7 +271,7 @@ export default class FolderDrilldownPlugin extends Plugin {
 			const items = container.querySelectorAll('.nav-folder, .nav-file');
 			
 			items.forEach((item: Element) => {
-				const titleEl = item.querySelector('.nav-folder-title, .nav-file-title') as HTMLElement;
+				const titleEl = item.querySelector('.nav-folder-title, .nav-file-title');
 				if (!titleEl) return;
 				
 				const path = titleEl.getAttribute('data-path');
