@@ -2,3 +2,44 @@
 .is-hidden-by-drilldown {
     display: none !important;
 }
+
+/* Breadcrumb pinned at the top of the file list */
+.drilldown-breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 6px 12px;
+    margin: 0;
+    font-size: var(--font-ui-smaller);
+    color: var(--text-muted);
+    background-color: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+    user-select: none;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.drilldown-crumb {
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: var(--radius-s);
+    white-space: nowrap;
+}
+
+.drilldown-crumb:hover {
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
+.drilldown-crumb.is-current {
+    color: var(--text-normal);
+    font-weight: var(--font-semibold);
+    cursor: default;
+}
+
+.drilldown-crumb-sep {
+    color: var(--text-faint);
+    padding: 0 2px;
+}

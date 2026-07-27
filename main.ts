@@ -267,6 +267,9 @@ export default class FolderDrilldownPlugin extends Plugin {
 			const container = leaf.view.containerEl.querySelector('.nav-files-container');
 			if (!container) return;
 
+			// Render the breadcrumb (root + current path) at the top of the list
+			this.renderBreadcrumb(container);
+
 			// Get all folder and file elements
 			const items = container.querySelectorAll('.nav-folder, .nav-file');
 			
@@ -321,6 +324,59 @@ export default class FolderDrilldownPlugin extends Plugin {
 					item.classList.add('is-hidden-by-drilldown');
 				}
 			});
+		});
+	}
+
+	/**
+	 * Render a breadcrumb at the top of the file list showing the path from
+	 * the root down to the current focus folder. Each crumb is clickable and
+	 * jumps to that level. Hidden when already at the root.
+	 */
+	private renderBreadcrumb(container: Element) {
+		const focusPath = this.settings.focusPath;
+		let crumb = container.querySelector('.drilldown-breadcrumb') as HTMLElement | null;
+
+		// At root there is nothing to drill into, so hide the breadcrumb.
+		if (focusPath === '/') {
+			if (crumb) crumb.remove();
+			return;
+		}
+
+		if (!crumb) {
+			crumb = document.createElement('div');
+			crumb.className = 'drilldown-breadcrumb';
+			container.insertBefore(crumb, container.firstChild);
+		}
+		// Rebuild contents on every pass (handles Obsidian re-renders too).
+		while (crumb.firstChild) crumb.removeChild(crumb.firstChild);
+
+		// Build the list of crumbs: always start with the root, then each segment.
+		const segments = focusPath.split('/').filter((seg) => seg.length > 0);
+		const crumbs: { label: string; path: string }[] = [{ label: '根目录', path: '/' }];
+		let acc = '';
+		for (const seg of segments) {
+			acc += '/' + seg;
+			crumbs.push({ label: seg, path: acc });
+		}
+
+		crumbs.forEach((c, i) => {
+			const span = document.createElement('span');
+			span.className = 'drilldown-crumb';
+			if (c.path === focusPath) span.classList.add('is-current');
+			span.textContent = c.label;
+			span.addEventListener('click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				void this.setFocus(c.path);
+			});
+			crumb!.appendChild(span);
+
+			if (i < crumbs.length - 1) {
+				const sep = document.createElement('span');
+				sep.className = 'drilldown-crumb-sep';
+				sep.textContent = '›';
+				crumb!.appendChild(sep);
+			}
 		});
 	}
 
