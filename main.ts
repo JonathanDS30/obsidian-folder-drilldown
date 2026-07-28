@@ -164,7 +164,6 @@ export default class FolderDrilldownPlugin extends Plugin {
 	 * Set new focus path and update view.
 	 */
 	private async setFocus(path: string) {
-		console.debug('FolderDrilldown: setFocus', path);
 		// Validation: Ensure folder still exists
 		// Root '/' is always valid
 		if (path !== '/') {
@@ -330,28 +329,37 @@ export default class FolderDrilldownPlugin extends Plugin {
 			});
 
 			// ---- Indentation fix ----
-			// Obsidian uses padding-inline-start on .nav-folder-children for tree
-			// indentation. When we drill into a folder, all ancestor children
-			// containers must lose that padding so the focused folder is flush left.
-			if (focusPath === '/') {
-				container.querySelectorAll('.nav-folder-children').forEach((el) => {
-					(el as HTMLElement).style.removeProperty('padding-inline-start');
-				});
-			} else {
-				const focusTitle = container.querySelector(
-					'.nav-folder-title:not(.is-hidden-by-drilldown)[data-path="' + focusPath + '"]'
-				);
-				const focusFolder = focusTitle?.closest('.nav-folder');
-				if (focusFolder) {
-					let el: Element | null = focusFolder.parentElement;
-					while (el && el !== container) {
-						if (el.classList.contains('nav-folder-children')) {
-							(el as HTMLElement).style.paddingInlineStart = '0';
-						}
-						el = el.parentElement;
-					}
+			// Obsidian indents nested levels via BOTH padding-inline-start AND
+			// margin-inline-start on .nav-folder-children. We clear BOTH on every
+			// ancestor children-container of the focused folder so it appears
+			// flush left at any depth.
+			//
+			// IMPORTANT: Only clear direct padding/margin properties, NOT the
+			// CSS variables (--nav-item-children-padding-start etc.), because
+			// CSS variables are INHERITED — clearing them on an ancestor would
+			// also zero them on the focused folder's own descendants, killing
+			// all subfolder indentation.
+			const focusTitle = container.querySelector(
+				'.nav-folder-title:not(.is-hidden-by-drilldown)[data-path="' + focusPath + '"]'
+			);
+			const focusFolder = focusTitle?.closest('.nav-folder');
+			container.querySelectorAll('.nav-folder-children').forEach((childrenEl) => {
+				const html = childrenEl as HTMLElement;
+				// html.contains(focusFolder) is true for every ancestor
+				// children-container (they wrap the focused folder), but false
+				// for the focused folder's OWN children (which wrap descendants).
+				if (focusFolder && html.contains(focusFolder)) {
+					html.style.setProperty('padding-inline-start', '0', 'important');
+					html.style.setProperty('padding-left', '0', 'important');
+					html.style.setProperty('margin-inline-start', '0', 'important');
+					html.style.setProperty('margin-left', '0', 'important');
+				} else {
+					html.style.removeProperty('padding-inline-start');
+					html.style.removeProperty('padding-left');
+					html.style.removeProperty('margin-inline-start');
+					html.style.removeProperty('margin-left');
 				}
-			}
+			});
 		});
 	}
 
@@ -374,29 +382,18 @@ export default class FolderDrilldownPlugin extends Plugin {
 			crumb = document.createElement('div');
 			crumb.className = 'drilldown-breadcrumb';
 			container.insertBefore(crumb, container.firstChild);
-
-			// Single delegated listener on the container — survives rebuilds
-			crumb.addEventListener('click', (evt: MouseEvent) => {
-				const crumbEl = (evt.target as HTMLElement).closest('.drilldown-crumb');
-				if (!crumbEl) return;
-				const dest = crumbEl.getAttribute('data-path');
-				if (!dest) return;
-
-				evt.preventDefault();
-				evt.stopPropagation();
-				console.debug(`Breadcrumb click: "${dest}"`);
-				void this.setFocus(dest);
-			});
 		}
 		// Rebuild contents on every pass (handles Obsidian re-renders too).
 		while (crumb.firstChild) crumb.removeChild(crumb.firstChild);
 
 		// Build the list of crumbs: always start with the root, then each segment.
+		// NOTE: Obsidian's data-path uses paths WITHOUT a leading slash for
+		// non-root items (e.g. "A/B/C", not "/A/B/C"). Root is "/".
 		const segments = focusPath.split('/').filter((seg) => seg.length > 0);
-		const crumbs: { label: string; path: string }[] = [{ label: '根目录', path: '/' }];
+		const crumbs: { label: string; path: string }[] = [{ label: 'Root', path: '/' }];
 		let acc = '';
 		for (const seg of segments) {
-			acc += '/' + seg;
+			acc = acc ? acc + '/' + seg : seg;
 			crumbs.push({ label: seg, path: acc });
 		}
 
@@ -406,6 +403,20 @@ export default class FolderDrilldownPlugin extends Plugin {
 			span.setAttribute('data-path', c.path);
 			if (c.path === focusPath) span.classList.add('is-current');
 			span.textContent = c.label;
+
+			// Capture path in a local const for the closure. Direct listener on
+			// each span — most robust, no delegation, no text-node issues.
+			const dest = c.path;
+			span.addEventListener('click', (evt: MouseEvent) => {
+				evt.preventDefault();
+				evt.stopPropagation();
+				// Breadcrumb targets are always already-expanded ancestors, so
+				// skip expandFolder/collapseDirectChildren and just update state
+				// + re-apply filtering directly.
+				this.settings.focusPath = dest;
+				void this.saveSettings().then(() => this.applyDrilldown());
+			});
+
 			crumb!.appendChild(span);
 
 			if (i < crumbs.length - 1) {
@@ -429,7 +440,11 @@ export default class FolderDrilldownPlugin extends Plugin {
 			hidden.forEach((el: Element) => el.classList.remove('is-hidden-by-drilldown'));
 			// Reset any inline indentation styles
 			container.querySelectorAll('.nav-folder-children').forEach((el) => {
-				(el as HTMLElement).style.removeProperty('padding-inline-start');
+				const html = el as HTMLElement;
+				html.style.removeProperty('padding-inline-start');
+				html.style.removeProperty('padding-left');
+				html.style.removeProperty('margin-inline-start');
+				html.style.removeProperty('margin-left');
 			});
 			// Remove breadcrumb
 			const bc = container.querySelector('.drilldown-breadcrumb');
