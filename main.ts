@@ -100,7 +100,10 @@ export default class FolderDrilldownPlugin extends Plugin {
 		if (!target || !(target instanceof Element)) return;
 
 		const element = target as HTMLElement;
-		
+
+		// Skip clicks on our own breadcrumb — handled by renderBreadcrumb
+		if (element.closest('.drilldown-breadcrumb')) return;
+
 		// Check if click occurred in file explorer
 		const explorerContainer = element.closest('.nav-files-container');
 		if (!explorerContainer) return;
@@ -161,6 +164,7 @@ export default class FolderDrilldownPlugin extends Plugin {
 	 * Set new focus path and update view.
 	 */
 	private async setFocus(path: string) {
+		console.debug('FolderDrilldown: setFocus', path);
 		// Validation: Ensure folder still exists
 		// Root '/' is always valid
 		if (path !== '/') {
@@ -324,6 +328,30 @@ export default class FolderDrilldownPlugin extends Plugin {
 					item.classList.add('is-hidden-by-drilldown');
 				}
 			});
+
+			// ---- Indentation fix ----
+			// Obsidian uses padding-inline-start on .nav-folder-children for tree
+			// indentation. When we drill into a folder, all ancestor children
+			// containers must lose that padding so the focused folder is flush left.
+			if (focusPath === '/') {
+				container.querySelectorAll('.nav-folder-children').forEach((el) => {
+					(el as HTMLElement).style.removeProperty('padding-inline-start');
+				});
+			} else {
+				const focusTitle = container.querySelector(
+					'.nav-folder-title:not(.is-hidden-by-drilldown)[data-path="' + focusPath + '"]'
+				);
+				const focusFolder = focusTitle?.closest('.nav-folder');
+				if (focusFolder) {
+					let el: Element | null = focusFolder.parentElement;
+					while (el && el !== container) {
+						if (el.classList.contains('nav-folder-children')) {
+							(el as HTMLElement).style.paddingInlineStart = '0';
+						}
+						el = el.parentElement;
+					}
+				}
+			}
 		});
 	}
 
@@ -346,6 +374,19 @@ export default class FolderDrilldownPlugin extends Plugin {
 			crumb = document.createElement('div');
 			crumb.className = 'drilldown-breadcrumb';
 			container.insertBefore(crumb, container.firstChild);
+
+			// Single delegated listener on the container — survives rebuilds
+			crumb.addEventListener('click', (evt: MouseEvent) => {
+				const crumbEl = (evt.target as HTMLElement).closest('.drilldown-crumb');
+				if (!crumbEl) return;
+				const dest = crumbEl.getAttribute('data-path');
+				if (!dest) return;
+
+				evt.preventDefault();
+				evt.stopPropagation();
+				console.debug(`Breadcrumb click: "${dest}"`);
+				void this.setFocus(dest);
+			});
 		}
 		// Rebuild contents on every pass (handles Obsidian re-renders too).
 		while (crumb.firstChild) crumb.removeChild(crumb.firstChild);
@@ -362,19 +403,15 @@ export default class FolderDrilldownPlugin extends Plugin {
 		crumbs.forEach((c, i) => {
 			const span = document.createElement('span');
 			span.className = 'drilldown-crumb';
+			span.setAttribute('data-path', c.path);
 			if (c.path === focusPath) span.classList.add('is-current');
 			span.textContent = c.label;
-			span.addEventListener('click', (evt: MouseEvent) => {
-				evt.preventDefault();
-				evt.stopPropagation();
-				void this.setFocus(c.path);
-			});
 			crumb!.appendChild(span);
 
 			if (i < crumbs.length - 1) {
 				const sep = document.createElement('span');
 				sep.className = 'drilldown-crumb-sep';
-				sep.textContent = '›';
+				sep.textContent = '\u203A'; // ›
 				crumb!.appendChild(sep);
 			}
 		});
@@ -390,6 +427,13 @@ export default class FolderDrilldownPlugin extends Plugin {
 			if (!container) return;
 			const hidden = container.querySelectorAll('.is-hidden-by-drilldown');
 			hidden.forEach((el: Element) => el.classList.remove('is-hidden-by-drilldown'));
+			// Reset any inline indentation styles
+			container.querySelectorAll('.nav-folder-children').forEach((el) => {
+				(el as HTMLElement).style.removeProperty('padding-inline-start');
+			});
+			// Remove breadcrumb
+			const bc = container.querySelector('.drilldown-breadcrumb');
+			if (bc) bc.remove();
 		});
 	}
 }
